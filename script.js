@@ -10,14 +10,24 @@ const body = document.body;
 // PNG 파일 경로
 const ONLINE_PNG = 'online.png';
 const OFFLINE_PNG = 'offline.png';
+const SPEED_TEST_IMAGE = 'speed-test.jpg'; // 속도 측정용 이미지
 
 // 이미지 프리로딩용 객체들
 const onlineImg = new Image();
 const offlineImg = new Image();
 
+// 폰트 프리로딩용
+const fonts = [
+    './font/font-light.woff2',
+    './font/ABCGravity-Extended-Trial.woff2',
+    './font/ABCGinto-Bold-Trial.woff2'
+];
+
 // 이미지 프리로딩 완료 체크
 let imagesLoaded = 0;
 let totalImages = 2;
+let fontsLoaded = 0;
+let totalFonts = fonts.length;
 
 // 이미지 로드 완료 체크 함수
 function checkImagesLoaded() {
@@ -31,36 +41,61 @@ function checkImagesLoaded() {
     }
 }
 
-// 네트워크 속도 가져오기 함수
-function getNetworkSpeed() {
-    // 오프라인이면 0 반환
+// 폰트 로드 완료 체크 함수
+function checkFontsLoaded() {
+    fontsLoaded++;
+    if (fontsLoaded >= totalFonts) {
+        console.log('모든 폰트 프리로딩 완료');
+    }
+}
+
+// 네트워크 속도 실제 측정 함수
+async function measureNetworkSpeed() {
     if (!navigator.onLine) {
         return 0;
     }
     
-    // Network Information API 사용
-    if (navigator.connection && navigator.connection.downlink) {
-        return navigator.connection.downlink;
+    try {
+        const fileSize = 500 * 1024; // 500KB (실제 파일 크기에 맞춰 조정)
+        const startTime = new Date().getTime();
+        
+        // 캐시 방지를 위해 랜덤 쿼리 추가
+        const cacheBuster = '?t=' + startTime;
+        const response = await fetch(SPEED_TEST_IMAGE + cacheBuster);
+        await response.blob();
+        
+        const endTime = new Date().getTime();
+        const duration = (endTime - startTime) / 1000; // 초 단위
+        const bitsLoaded = fileSize * 8;
+        const speedBps = bitsLoaded / duration;
+        const speedMbps = speedBps / (1024 * 1024);
+        
+        return speedMbps;
+    } catch (error) {
+        console.error('속도 측정 실패:', error);
+        return 0;
     }
-    
-    // API 지원 안 하면 기본값
-    return 0;
 }
 
 // 네트워크 속도 표시 업데이트
-function updateNetworkSpeed() {
-    const speed = getNetworkSpeed();
-    networkSpeedElement.innerHTML = `${speed.toFixed(2)}<br>Mbps`;
-    console.log('네트워크 속도:', speed.toFixed(2), 'Mbps');
+async function updateNetworkSpeed() {
+    if (!navigator.onLine) {
+        networkSpeedElement.innerHTML = `0.0<br>Mbps`;
+        return;
+    }
+    
+    const speed = await measureNetworkSpeed();
+    networkSpeedElement.innerHTML = `${speed.toFixed(1)}<br>Mbps`;
+    console.log('네트워크 속도:', speed.toFixed(1), 'Mbps');
 }
 
-// 네트워크 속도 업데이트 시작 (2.5초마다)
+// 네트워크 속도 업데이트 시작 (3초마다)
 function startNetworkSpeedUpdates() {
     // 즉시 한 번 업데이트
     updateNetworkSpeed();
     
-    // 2.5초마다 반복
-    setInterval(updateNetworkSpeed, 2500);
+    // 3초마다 반복
+    setInterval(updateNetworkSpeed, 3000);
 }
 
 // 연결 상태 업데이트 함수
@@ -76,7 +111,7 @@ function updateConnectionStatus() {
         statusPng.src = offlineImg.src;
         statusPng.alt = 'OFFLINE';
         console.log('연결 끊김: 오프라인 상태 - OFFLINE PNG 표시');
-        networkSpeedElement.innerHTML = `0<br>Mbps`;
+        networkSpeedElement.innerHTML = `0.0<br>Mbps`;
     }
 }
 
@@ -101,6 +136,29 @@ function preloadImages() {
     offlineImg.src = OFFLINE_PNG;
 }
 
+// 폰트 프리로딩 시작
+async function preloadFonts() {
+    console.log('폰트 프리로딩 시작...');
+    
+    const fontPromises = fonts.map(async (fontUrl) => {
+        try {
+            const fontName = fontUrl.includes('Gravity') ? 'extendedFont' : 
+                           fontUrl.includes('Ginto') ? 'bodyFont' : 'myFont';
+            
+            const font = new FontFace(fontName, `url(${fontUrl})`);
+            await font.load();
+            document.fonts.add(font);
+            console.log('폰트 로드 완료:', fontUrl);
+            checkFontsLoaded();
+        } catch (error) {
+            console.error('폰트 로드 실패:', fontUrl, error);
+            checkFontsLoaded();
+        }
+    });
+    
+    await Promise.all(fontPromises);
+}
+
 // 버튼 랜덤 위치 설정
 function setRandomButtonPosition() {
     const buttonSize = 60; // 버튼 크기
@@ -122,8 +180,9 @@ function setRandomButtonPosition() {
 // 페이지 로드 시 이미지 프리로딩 시작
 window.addEventListener('load', () => {
     preloadImages();
+    preloadFonts();
     setRandomButtonPosition();
-    console.log('페이지 로드 완료, 이미지 프리로딩 중...');
+    console.log('페이지 로드 완료, 이미지 및 폰트 프리로딩 중...');
 });
 
 // 온라인 상태로 변경될 때
